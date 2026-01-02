@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sky Dash - Final Version</title>
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, get, query, orderByChild, limitToLast, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCd_EOsJ6a4Ujpn-t51m_Rsol4F4gn1Yn8",
+            authDomain: "skydash-67ef5.firebaseapp.com",
+            databaseURL: "https://skydash-67ef5-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "skydash-67ef5",
+            storageBucket: "skydash-67ef5.firebasestorage.app",
+            messagingSenderId: "220040487812",
+            appId: "1:220040487812:web:69cfab45c535cff6bdf3d1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        window.db = db; 
+        
+        window.saveHighScore = async (newScore) => {
+            if(!window.currentUser) return;
+            const userRef = ref(window.db, 'users/' + window.currentUser);
+            try {
+                const snapshot = await get(userRef);
+                const currentHS = snapshot.val().highscore || 0;
+                if(newScore > currentHS) { await update(userRef, { highscore: newScore }); }
+            } catch(e) {}
+        };
+
+        window.openLeaderboard = async () => {
+            const list = document.getElementById('leaderboard-list');
+            list.innerHTML = "<div style='color:white; text-align:center;'>Memuat...</div>";
+            document.getElementById('leaderboard-layer').style.display = 'flex';
+            try {
+                const usersRef = query(ref(window.db, 'users'), orderByChild('highscore'), limitToLast(20));
+                const snapshot = await get(usersRef);
+                let players = [];
+                snapshot.forEach((child) => { if(child.val().highscore > 0) players.push({ name: child.key, score: child.val().highscore }); });
+                players.sort((a, b) => b.score - a.score);
+                list.innerHTML = "";
+                players.forEach((p, i) => {
+                    const item = document.createElement('div');
+                    item.className = 'leaderboard-item';
+                    let rank = i + 1;
+                    let trophy = rank === 1 ? "🥇 " : rank === 2 ? "🥈 " : rank === 3 ? "🥉 " : "";
+                    item.innerHTML = `<span>${trophy}${rank}. ${p.name.toUpperCase()}</span><span>${p.score}</span>`;
+                    list.appendChild(item);
+                });
+            } catch(e) { list.innerHTML = "<div style='color:red; text-align:center;'>Gagal memuat</div>"; }
+        };
+    </script>
+
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #87CEEB; -webkit-user-select: none; user-select: none;
+            touch-action: none; -webkit-tap-highlight-color: transparent;
+        }
+        #game-canvas {
+            position: relative; width: 100vw; height: 100vh;
+            background-image: url(https://files.catbox.moe/yit2m6.jpg);
+            background-size: cover; background-position: center; overflow: hidden;
+        }
+        #auth-layer {
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding-bottom: 60px; 
+            background: rgba(0,0,0,0.5); z-index: 100;
+        }
+        .auth-container {
+            background: #1a1a1a; padding: 25px 15px; border-radius: 20px;
+            display: flex; flex-direction: column; gap: 10px; width: 260px; 
+            align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .auth-input, .btn-auth, .btn-menu {
+            width: 100%; padding: 12px 0; border: none; border-radius: 8px;
+            font-family: 'Arial Black', sans-serif; font-weight: 900; text-align: center;
+            font-size: 13px; outline: none; box-sizing: border-box; text-transform: uppercase;
+        }
+        .btn-auth, .btn-menu {
+            font-size: 15px; cursor: pointer; color: white;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5); transition: transform 0.1s ease;
+            background: #87CEEB;
+        }
+        .btn-auth:active, .btn-menu:active {
+            transform: scale(0.92);
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+        }
+        #auth-message {
+            color: #ff4d4d; font-size: 9px; font-weight: bold; text-align: center;
+            min-height: 25px; margin-top: 5px; font-family: 'Arial Black', sans-serif;
+            width: 100%; line-height: 1.2;
+        }
+        #leaderboard-layer { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 145px; background: rgba(0,0,0,0.4); z-index: 150; }
+        .leaderboard-container { background: #1a1a1a; width: 280px; height: 50vh; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .leaderboard-container h2 { font-family: 'Russo One', sans-serif; color: #FFFFFF; margin-bottom: 10px; }
+        .leaderboard-list { width: 100%; overflow-y: auto; margin: 10px 0; flex-grow: 1; }
+        .leaderboard-item { display: flex; justify-content: space-between; padding: 10px; margin-bottom: 5px; background: #333; border-radius: 8px; color: white; font-family: 'Arial Black', sans-serif; font-size: 13px; }
+        
+        #ui-layer { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; background: rgba(0,0,0,0.4); z-index: 20; }
+        .menu-container { display: flex; flex-direction: column; gap: 12px; align-items: center; margin-top: 225px; }
+        h1#game-title { margin: 0 0 15px 0; font-family: 'Russo One', sans-serif; color: #87CEEB; text-transform: uppercase; width: 350px; text-align: center; font-size: 48px; text-shadow: 4px 4px 0px #000; }
+        
+        #score-display { 
+            position: absolute; top: 42px; left: 50%; transform: translateX(-50%); 
+            color: #87CEEB; font-family: 'Russo One', sans-serif; font-size: 32px; 
+            text-shadow: 3px 3px 0px #000; z-index: 10; display: none; pointer-events: none;
+        }
+
+        /* Gaya baru untuk timer kebal */
+        #invincible-timer { 
+            position: absolute; top: 82px; left: 50%; transform: translateX(-50%); 
+            color: #87CEEB; font-family: 'Russo One', sans-serif; font-size: 22px; 
+            text-shadow: 2px 2px 0px #000; z-index: 10; display: none; pointer-events: none;
+        }
+
+        #game-over-dialog { 
+            position: absolute; top: 47%; left: 50%; transform: translate(-50%, -50%); 
+            background: rgba(0, 0, 0, 0.9); border-radius: 15px; padding: 20px; 
+            display: none; flex-direction: column; align-items: center; z-index: 30; width: 240px; 
+        }
+        .go-text-group {
+            display: flex; flex-direction: column; align-items: center;
+            margin-bottom: 15px; gap: 2px;
+        }
+        .go-title, .go-score, .go-user { 
+            color: #FFFFFF !important; 
+            font-family: 'Arial Black', sans-serif; 
+            font-weight: 900; 
+            margin: 0; 
+            text-align: center;
+        }
+        .go-title { font-size: 22px; }
+        .go-score { font-size: 16px; }
+        .go-user { font-size: 14px; text-transform: uppercase; }
+
+        #player { position: absolute; font-size: 55px; z-index: 5; display: none; transform: translate(-50%, -50%) rotate(-45deg); transition: opacity 0.1s; }
+        .cloud, .star { position: absolute; font-size: 70px; top: -100px; z-index: 4; }
+        .star { font-size: 45px; z-index: 6; }
+        
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        .invincible { animation: blink 0.2s infinite; }
+    </style>
+</head>
+<body>
+
+    <div id="game-canvas">
+        <div id="auth-layer">
+            <div class="auth-container">
+                <h2 style="font-family:'Russo One'; color:#87CEEB; margin-bottom: 10px; font-size: 24px;">SKY DASH</h2>
+                <input type="text" id="username" class="auth-input" placeholder="NAMA PENGGUNA">
+                <input type="password" id="password" class="auth-input" placeholder="KATA SANDI">
+                <button class="btn-auth" onclick="delayedAction(handleLogin)">MASUK</button>
+                <button class="btn-auth" style="background: #555;" onclick="delayedAction(handleRegister)">BUAT AKUN</button>
+                <div id="auth-message"></div>
+            </div>
+        </div>
+
+        <div id="leaderboard-layer"><div class="leaderboard-container"><h2>LEADERBOARD</h2><div class="leaderboard-list" id="leaderboard-list"></div><button class="btn-menu" style="width:100%; height:45px; font-size:14px;" onclick="delayedAction(closeLeaderboard)">KEMBALI</button></div></div>
+        
+        <div id="score-display">SKOR: 0</div>
+        <div id="invincible-timer">KEBAL: 5s</div>
+        <div id="player">✈️</div>
+
+        <div id="ui-layer">
+            <div class="menu-container">
+                <h1 id="game-title">SKY DASH</h1>
+                <button class="btn-menu" style="width:280px" onclick="delayedAction(startGame)">Mulai Sekarang</button>
+                <button class="btn-menu" style="width:280px" onclick="delayedAction(window.openLeaderboard)">Leaderboard</button>
+                <button class="btn-menu" style="width:280px" onclick="delayedAction(logout)">Keluar</button>
+            </div>
+        </div>
+        
+        <div id="game-over-dialog">
+            <div class="go-text-group">
+                <p class="go-title">KAMU KALAH!</p>
+                <p class="go-score" id="final-score">SKOR KAMU: 0</p>
+                <p class="go-user" id="final-username"></p>
+            </div>
+            <button class="btn-menu" style="width:100%; margin-bottom:8px;" onclick="delayedAction(startGame)">Mulai Lagi</button>
+            <button class="btn-menu" style="width:100%;" onclick="delayedAction(backToMenu)">Menu</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        const msgBox = document.getElementById('auth-message');
+
+        window.handleRegister = async () => {
+            const user = document.getElementById('username').value.trim().toLowerCase();
+            const pass = document.getElementById('password').value.trim();
+            if(user.length < 3 || pass.length < 3) { msgBox.innerText = "NAMA PENGGUNA KATA SANDI MINIMAL 3 KARAKTER!"; return; }
+            try {
+                const snapshot = await get(ref(window.db, 'users/' + user));
+                if(snapshot.exists()) { msgBox.innerText = "NAMA PENGGUNA SUDAH TERDAFTAR!"; } 
+                else {
+                    await set(ref(window.db, 'users/' + user), { password: pass, highscore: 0 });
+                    window.currentUser = user;
+                    document.getElementById('auth-layer').style.display = 'none';
+                    document.getElementById('ui-layer').style.display = 'flex';
+                }
+            } catch(e) { msgBox.innerText = "KONEKSI GAGAL!"; }
+        };
+
+        window.handleLogin = async () => {
+            const user = document.getElementById('username').value.trim().toLowerCase();
+            const pass = document.getElementById('password').value.trim();
+            if(user.length < 3 || pass.length < 3) { msgBox.innerText = "NAMA PENGGUNA KATA SANDI MINIMAL 3 KARAKTER!"; return; }
+            try {
+                const snapshot = await get(ref(window.db, 'users/' + user));
+                if(snapshot.exists() && snapshot.val().password === pass) {
+                    window.currentUser = user;
+                    document.getElementById('auth-layer').style.display = 'none';
+                    document.getElementById('ui-layer').style.display = 'flex';
+                } else { msgBox.innerText = "NAMA PENGGUNA ATAU KATA SANDI SALAH!"; }
+            } catch(e) { msgBox.innerText = "KONEKSI GAGAL!"; }
+        };
+    </script>
+
+    <script>
+        const player = document.getElementById('player');
+        const uiLayer = document.getElementById('ui-layer');
+        const gameOverDialog = document.getElementById('game-over-dialog');
+        const gameCanvas = document.getElementById('game-canvas');
+        const scoreDisplay = document.getElementById('score-display');
+        const invTimerDisplay = document.getElementById('invincible-timer');
+        
+        let gameActive = false, clouds = [], stars = [], score = 0;
+        let gameLoop, spawnTimer, scoreTimer;
+        let currentSpawnInterval = 700; 
+        let isInvincible = false;
+        let invincibleTimeout, invincibleInterval;
+        let activeStarLanes = []; 
+
+        function delayedAction(fn) { setTimeout(fn, 200); }
+        function logout() { location.reload(); }
+        function closeLeaderboard() { document.getElementById('leaderboard-layer').style.display = 'none'; }
+        
+        function startGame() { 
+            score = 0; currentSpawnInterval = 700; isInvincible = false; activeStarLanes = [];
+            player.classList.remove('invincible');
+            invTimerDisplay.style.display = 'none';
+            scoreDisplay.innerText = "SKOR: 0"; gameActive = true; 
+            uiLayer.style.display = 'none'; gameOverDialog.style.display = 'none'; 
+            scoreDisplay.style.display = 'block'; player.style.display = 'block'; 
+            player.style.left = '50%'; player.style.top = '50%'; 
+            clearAllObjects(); 
+            gameLoop = setInterval(updateGame, 16); 
+            resetSpawnTimer();
+
+            scoreTimer = setInterval(() => { 
+                if(gameActive) { 
+                    score++; 
+                    scoreDisplay.innerText = "SKOR: " + score; 
+                    if(score > 0 && score % 20 === 0) {
+                        currentSpawnInterval = Math.max(250, currentSpawnInterval - 80); 
+                        resetSpawnTimer();
+                        const starCount = Math.floor(Math.random() * 2) + 1;
+                        spawnStar(); 
+                        if(starCount === 2) {
+                            setTimeout(() => { if(gameActive) spawnStar(); }, Math.random() * 1000 + 6000);
+                        }
+                    }
+                } 
+            }, 1000); 
+        }
+
+        function resetSpawnTimer() { clearInterval(spawnTimer); spawnTimer = setInterval(spawnCloud, currentSpawnInterval); }
+
+        function spawnCloud() { 
+            if(!gameActive) return; 
+            let cloudX = 0, attempts = 0, isBlocked = true;
+            const margin = 100;
+            while (isBlocked && attempts < 15) {
+                cloudX = Math.random() * (window.innerWidth - 80);
+                isBlocked = false; attempts++;
+                for (let sx of activeStarLanes) {
+                    if (Math.abs(cloudX - sx) < margin) { isBlocked = true; break; }
+                }
+            }
+            const el = document.createElement('div'); el.className = 'cloud'; el.innerText = '☁️'; 
+            el.style.left = cloudX + 'px'; gameCanvas.appendChild(el); 
+            const speed = 6 + (Math.floor(score/20) * 1.5) + (Math.random() * 4);
+            clouds.push({ element: el, top: -100, speed: speed }); 
+        }
+
+        function spawnStar() {
+            if(!gameActive) return;
+            const el = document.createElement('div'); el.className = 'star'; el.innerText = '⭐️';
+            const sx = Math.random() * (window.innerWidth - 60);
+            el.style.left = sx + 'px';
+            activeStarLanes.push(sx);
+            setTimeout(() => { activeStarLanes = activeStarLanes.filter(x => x !== sx); }, 2000);
+            gameCanvas.appendChild(el);
+            stars.push({ element: el, top: -120, speed: 5 });
+        }
+        
+        function updateGame() { 
+            if(!gameActive) return; 
+            for (let i = clouds.length - 1; i >= 0; i--) { 
+                let c = clouds[i]; c.top += c.speed; c.element.style.top = c.top + 'px'; 
+                if (isColliding(player, c.element) && !isInvincible) gameOver();
+                if (c.top > window.innerHeight) { c.element.remove(); clouds.splice(i, 1); } 
+            } 
+            for (let i = stars.length - 1; i >= 0; i--) {
+                let s = stars[i]; s.top += s.speed; s.element.style.top = s.top + 'px';
+                if (isColliding(player, s.element)) { activateInvincibility(); s.element.remove(); stars.splice(i, 1); }
+                if (s.top > window.innerHeight) { s.element.remove(); stars.splice(i, 1); }
+            }
+        }
+
+        function activateInvincibility() {
+            isInvincible = true; 
+            player.classList.add('invincible');
+            invTimerDisplay.style.display = 'block';
+            
+            let timeLeft = 5;
+            invTimerDisplay.innerText = `KEBAL: ${timeLeft}s`;
+
+            clearTimeout(invincibleTimeout);
+            clearInterval(invincibleInterval);
+
+            invincibleInterval = setInterval(() => {
+                timeLeft--;
+                if(timeLeft > 0) invTimerDisplay.innerText = `KEBAL: ${timeLeft}s`;
+                else clearInterval(invincibleInterval);
+            }, 1000);
+
+            invincibleTimeout = setTimeout(() => { 
+                isInvincible = false; 
+                player.classList.remove('invincible'); 
+                invTimerDisplay.style.display = 'none';
+            }, 5000); 
+        }
+
+        function isColliding(a, b) { 
+            const p = a.getBoundingClientRect(), c = b.getBoundingClientRect(); 
+            const pad = 22; 
+            return !(p.top + pad > c.bottom - pad || p.bottom - pad < c.top + pad || p.left + pad > c.right - pad || p.right - pad < c.left + pad); 
+        }
+        
+        function gameOver() { 
+            gameActive = false; 
+            clearInterval(gameLoop); clearInterval(spawnTimer); clearInterval(scoreTimer); 
+            clearInterval(invincibleInterval);
+            invTimerDisplay.style.display = 'none';
+            document.getElementById('final-score').innerText = "SKOR KAMU: " + score;
+            document.getElementById('final-username').innerText = window.currentUser ? window.currentUser : "PLAYER";
+            scoreDisplay.style.display = 'none'; 
+            gameOverDialog.style.display = 'flex'; 
+            if(window.saveHighScore) window.saveHighScore(score); 
+        }
+
+        function clearAllObjects() { 
+            clouds.forEach(c => c.element.remove()); clouds = []; 
+            stars.forEach(s => s.element.remove()); stars = [];
+        }
+        
+        function backToMenu() { 
+            gameOverDialog.style.display = 'none'; uiLayer.style.display = 'flex'; 
+            player.style.display = 'none'; scoreDisplay.style.display = 'none';
+            invTimerDisplay.style.display = 'none';
+            clearAllObjects(); 
+        }
+
+        function updatePosition(x) { 
+            if(!gameActive) return; 
+            let rect = gameCanvas.getBoundingClientRect(); 
+            let posX = x - rect.left; 
+            if(posX > 30 && posX < rect.width - 30) player.style.left = posX + 'px'; 
+        }
+
+        document.addEventListener('mousemove', (e) => updatePosition(e.clientX));
+        document.addEventListener('touchmove', (e) => { 
+            if (gameActive) { updatePosition(e.touches[0].clientX); e.preventDefault(); } 
+        }, { passive: false });
+    </script>
+</body>
+</html>
